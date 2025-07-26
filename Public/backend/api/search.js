@@ -87,7 +87,41 @@ module.exports = async (req, res) => {
     console.log('[DEBUG] Error response status:', error.response?.status);
     console.log('[DEBUG] Error response data:', error.response?.data);
     
-    // Return more specific error information
+    // Check if it's a quota exceeded error
+    if (error.response?.status === 403 && error.response?.data?.error?.message?.includes('quota')) {
+      console.log('[DEBUG] Quota exceeded, returning mock data');
+      // Return mock data when quota is exceeded
+      return res.status(200).json({
+        items: [
+          {
+            id: { videoId: 'dQw4w9WgXcQ' },
+            snippet: {
+              title: `Mock Song for "${q}"`,
+              channelTitle: 'Test Channel',
+              thumbnails: {
+                default: { url: 'https://via.placeholder.com/120x90' },
+                medium: { url: 'https://via.placeholder.com/320x180' },
+                high: { url: 'https://via.placeholder.com/480x360' }
+              }
+            }
+          },
+          {
+            id: { videoId: 'jNQXAC9IVRw' },
+            snippet: {
+              title: `Another Mock Song for "${q}"`,
+              channelTitle: 'Test Channel 2',
+              thumbnails: {
+                default: { url: 'https://via.placeholder.com/120x90' },
+                medium: { url: 'https://via.placeholder.com/320x180' },
+                high: { url: 'https://via.placeholder.com/480x360' }
+              }
+            }
+          }
+        ]
+      });
+    }
+    
+    // Return more specific error information for other errors
     res.status(500).json({ 
       error: 'YouTube search failed', 
       details: error.message,

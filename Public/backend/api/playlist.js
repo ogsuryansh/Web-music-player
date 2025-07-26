@@ -130,6 +130,49 @@ module.exports = async (req, res) => {
 
   } catch (error) {
     console.log('[DEBUG] Playlist API error:', error.message);
+    console.log('[DEBUG] Error response status:', error.response?.status);
+    console.log('[DEBUG] Error response data:', error.response?.data);
+    
+    // Check if it's a quota exceeded error
+    if (error.response?.status === 403 && error.response?.data?.error?.message?.includes('quota')) {
+      console.log('[DEBUG] Quota exceeded, returning mock playlist data');
+      // Return mock playlist data when quota is exceeded
+      return res.status(200).json({
+        playlistInfo: {
+          title: 'Mock Playlist (Quota Exceeded)',
+          description: 'This is mock data because YouTube API quota was exceeded',
+          thumbnail: 'https://via.placeholder.com/480x360',
+          videoCount: 2
+        },
+        videos: [
+          {
+            id: { videoId: 'dQw4w9WgXcQ' },
+            snippet: {
+              title: 'Mock Playlist Song 1',
+              channelTitle: 'Test Channel',
+              thumbnails: {
+                default: { url: 'https://via.placeholder.com/120x90' },
+                medium: { url: 'https://via.placeholder.com/320x180' },
+                high: { url: 'https://via.placeholder.com/480x360' }
+              }
+            }
+          },
+          {
+            id: { videoId: 'jNQXAC9IVRw' },
+            snippet: {
+              title: 'Mock Playlist Song 2',
+              channelTitle: 'Test Channel 2',
+              thumbnails: {
+                default: { url: 'https://via.placeholder.com/120x90' },
+                medium: { url: 'https://via.placeholder.com/320x180' },
+                high: { url: 'https://via.placeholder.com/480x360' }
+              }
+            }
+          }
+        ]
+      });
+    }
+    
     res.status(500).json({ 
       error: 'Failed to fetch playlist', 
       details: error.message, 
