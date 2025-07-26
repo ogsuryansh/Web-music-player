@@ -1,12 +1,19 @@
 {
   "name": "music-player",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "A modern music player with YouTube integration",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
   },
-  "keywords": [],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["music", "player", "youtube", "react", "node"],
   "author": "",
-  "license": "ISC",
-  "description": ""
+  "license": "MIT"
 }

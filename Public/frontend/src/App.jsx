@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from './config';
 import './App.css';
 
 const navLinks = [
@@ -58,6 +59,9 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [toast, setToast] = useState('');
+  const [showYouTubePlaylistModal, setShowYouTubePlaylistModal] = useState(false);
+  const [youtubePlaylistUrl, setYoutubePlaylistUrl] = useState('');
+  const [youtubePlaylistLoading, setYoutubePlaylistLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [favorites, setFavorites] = useState(getFavoritesFromStorage());
   const [editingPlaylist, setEditingPlaylist] = useState(null);
@@ -76,6 +80,7 @@ export default function App() {
   const [showQueue, setShowQueue] = useState(false);
   const queueRef = useRef([]);
   const currentIndexRef = useRef(-1);
+  const [currentPlaylist, setCurrentPlaylist] = useState(null);
   // Remove showWaveform state
 
   // Add mobile navbar state
@@ -181,33 +186,50 @@ export default function App() {
         ] : []
       });
 
+      // Enhanced action handlers for lock screen controls
       navigator.mediaSession.setActionHandler('play', () => {
         if (playerRef.current) {
           playerRef.current.playVideo();
         }
+        setIsPlaying(true);
       });
 
       navigator.mediaSession.setActionHandler('pause', () => {
         if (playerRef.current) {
           playerRef.current.pauseVideo();
         }
+        setIsPlaying(false);
       });
 
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        handlePrevious();
-      });
-
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        handleNext();
-      });
+      // Note: previoustrack and nexttrack handlers will be set up later
 
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime !== undefined && playerRef.current) {
           playerRef.current.seekTo(details.seekTime);
+          setCurrentTime(details.seekTime);
         }
       });
+
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        if (playerRef.current) {
+          const newTime = Math.max(0, currentTime - (details.seekOffset || 10));
+          playerRef.current.seekTo(newTime);
+          setCurrentTime(newTime);
+        }
+      });
+
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        if (playerRef.current) {
+          const newTime = Math.min(duration, currentTime + (details.seekOffset || 10));
+          playerRef.current.seekTo(newTime);
+          setCurrentTime(newTime);
+        }
+      });
+
+      // Update playback state
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
-  }, [nowPlaying]);
+  }, [nowPlaying, isPlaying, currentTime, duration]);
 
   // YouTube Player API Integration
   const initializePlayer = useCallback(() => {
@@ -243,6 +265,12 @@ export default function App() {
 
   const onPlayerReady = (event) => {
     event.target.setVolume(volume); // Set initial volume when player is ready
+    
+    // Set up MediaSession handlers after player is ready
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('previoustrack', handlePrevious);
+      navigator.mediaSession.setActionHandler('nexttrack', handleNext);
+    }
   };
 
   // Update player state change to handle repeat and autoplay
@@ -254,6 +282,12 @@ export default function App() {
         // Update MediaSession state
         if ('mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'playing';
+          // Update position state for lock screen controls
+          navigator.mediaSession.setPositionState({
+            duration: duration,
+            playbackRate: 1,
+            position: currentTime
+          });
         }
         break;
       case window.YT.PlayerState.PAUSED:
@@ -261,6 +295,12 @@ export default function App() {
         // Update MediaSession state
         if ('mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'paused';
+          // Update position state for lock screen controls
+          navigator.mediaSession.setPositionState({
+            duration: duration,
+            playbackRate: 1,
+            position: currentTime
+          });
         }
         break;
       case window.YT.PlayerState.ENDED:
@@ -289,6 +329,14 @@ export default function App() {
             currentIndexRef.current = nextIndex;
             setCurrentSongIndex(nextIndex);
             addToRecentlyPlayed(nextSong);
+            
+            // Maintain playlist context if we're playing from a playlist
+            if (currentPlaylist && nextIndex === 0) {
+              // If we're at the end of the playlist and repeat is off, clear playlist context
+              if (repeatMode === 'off') {
+                setCurrentPlaylist(null);
+              }
+            }
           }
         }
         break;
@@ -381,15 +429,17 @@ export default function App() {
     }
   }, [initializePlayer]);
 
+
+
   // Register Service Worker for background audio
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('Service Worker registered successfully:', registration);
+        .then(() => {
+          // Service Worker registered successfully
         })
-        .catch((error) => {
-          console.log('Service Worker registration failed:', error);
+        .catch(() => {
+          // Service Worker registration failed
         });
 
       // Listen for messages from service worker
@@ -414,12 +464,11 @@ export default function App() {
         // Page is hidden (background) - ensure audio continues
         if (isPlaying && playerRef.current) {
           // Keep playing in background
-          console.log('App went to background, keeping audio playing');
         }
       } else {
         // Page is visible again - sync player state
         if (playerRef.current) {
-          console.log('App came to foreground');
+          // App came to foreground
         }
       }
     };
@@ -441,6 +490,8 @@ export default function App() {
   useEffect(() => {
     saveRecentlyPlayedToStorage(recentlyPlayed);
   }, [recentlyPlayed]);
+
+
 
   // Update volume when volume state changes
   useEffect(() => {
@@ -476,18 +527,42 @@ export default function App() {
   const handlePrevious = () => {
     if (currentSongIndex > 0) {
       const prevSong = queueRef.current[currentSongIndex - 1];
-      handleSongClick(prevSong);
-      setCurrentSongIndex(currentSongIndex - 1);
+      
+      // If we're in a playlist context, maintain it
+      if (currentPlaylist) {
+        setNowPlaying(prevSong);
+        playVideo(prevSong.id.videoId);
+        addToRecentlyPlayed(prevSong);
+        currentIndexRef.current = currentSongIndex - 1;
+        setCurrentSongIndex(currentSongIndex - 1);
+      } else {
+        // Regular queue behavior
+        handleSongClick(prevSong);
+        setCurrentSongIndex(currentSongIndex - 1);
+      }
     }
   };
 
   const handleNext = () => {
     if (currentSongIndex < queueRef.current.length - 1) {
       const nextSong = queueRef.current[currentSongIndex + 1];
-      handleSongClick(nextSong);
-      setCurrentSongIndex(currentSongIndex + 1);
+      
+      // If we're in a playlist context, maintain it
+      if (currentPlaylist) {
+        setNowPlaying(nextSong);
+        playVideo(nextSong.id.videoId);
+        addToRecentlyPlayed(nextSong);
+        currentIndexRef.current = currentSongIndex + 1;
+        setCurrentSongIndex(currentSongIndex + 1);
+      } else {
+        // Regular queue behavior
+        handleSongClick(nextSong);
+        setCurrentSongIndex(currentSongIndex + 1);
+      }
     }
   };
+
+
 
   const toggleRepeat = () => {
     setRepeatMode(prev => {
@@ -501,11 +576,37 @@ export default function App() {
     setAutoplay(prev => !prev);
   };
 
+  // Function to play from a playlist
+  const handlePlayFromPlaylist = (song, playlistName) => {
+    const playlist = playlists.find(p => p.name === playlistName);
+    if (!playlist) return;
+    
+    // Set current playlist context
+    setCurrentPlaylist(playlistName);
+    
+    // Find the index of the clicked song in the playlist
+    const songIndex = playlist.songs.findIndex(s => s.id.videoId === song.id.videoId);
+    
+    // Set the current song
+    setNowPlaying(song);
+    playVideo(song.id.videoId);
+    addToRecentlyPlayed(song);
+    
+    // Update queue and index
+    queueRef.current = playlist.songs;
+    setSongQueue(playlist.songs);
+    currentIndexRef.current = songIndex;
+    setCurrentSongIndex(songIndex);
+  };
+
   // Update handleSongClick to manage queue
   const handleSongClick = (song) => {
     setNowPlaying(song);
     playVideo(song.id.videoId);
     addToRecentlyPlayed(song);
+    
+    // Clear playlist context when playing individual songs
+    setCurrentPlaylist(null);
     
     // Add to queue if not already there
     const existingIndex = queueRef.current.findIndex(s => s.id.videoId === song.id.videoId);
@@ -573,10 +674,60 @@ export default function App() {
     'Trending Now'
   ];
 
+  // Auto-playlist categories with direct songs
+  const [autoPlaylistSongs, setAutoPlaylistSongs] = useState([]);
+  
+  const autoPlaylistCategories = [
+    { name: 'Bollywood Hits', keywords: ['bollywood hits', 'arijit singh', 'shreya ghoshal', 'latest bollywood'] },
+    { name: 'Lofi Music', keywords: ['lofi hindi', 'lofi bollywood', 'chill lofi', 'study lofi'] },
+    { name: 'Punjabi Songs', keywords: ['punjabi songs', 'diljit dosanjh', 'guru randhawa', 'latest punjabi'] },
+    { name: 'Romantic Songs', keywords: ['romantic songs', 'love songs', 'romantic bollywood', 'couple songs'] },
+    { name: 'Party Music', keywords: ['party songs', 'dance music', 'club songs', 'upbeat bollywood'] },
+    { name: 'Old Classics', keywords: ['old bollywood', 'classic songs', 'kishore kumar', 'lata mangeshkar'] },
+    { name: 'Workout Music', keywords: ['workout songs', 'gym music', 'motivation songs', 'energy music'] },
+    { name: 'Sleep Music', keywords: ['sleep music', 'calm songs', 'soothing music', 'bedtime songs'] }
+  ];
+
+  // Load auto-playlist songs on component mount and refresh
+  useEffect(() => {
+    const loadAutoPlaylistSongs = async () => {
+      setLoading(true);
+      const allSongs = [];
+      
+      try {
+        // Get 2-3 songs from each category
+        for (const category of autoPlaylistCategories) {
+          const keyword = category.keywords[Math.floor(Math.random() * category.keywords.length)];
+          const res = await axios.get(`${API_BASE_URL}/api/search`, { 
+            params: { q: keyword }, 
+            timeout: 10000 
+          });
+          
+          if (res.data.items && res.data.items.length > 0) {
+            const songs = res.data.items.slice(0, 3).map(song => ({
+              ...song,
+              category: category.name
+            }));
+            allSongs.push(...songs);
+          }
+        }
+        
+        setAutoPlaylistSongs(allSongs);
+      } catch (err) {
+        console.error('Auto-playlist loading error:', err);
+        setError('Failed to load songs');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadAutoPlaylistSongs();
+  }, []); // Empty dependency array means it runs once on mount
+
   // UI for History Tab
   const renderHistoryTab = () => (
     <div>
-      <h1>Recently Played</h1>
+              <h1 style={{fontSize:'1.8rem'}}>Recently Played</h1>
       <div className="search-results">
         {recentlyPlayed.length === 0 && <div style={{color:'#bfc9d9'}}>No recently played songs yet.</div>}
         {recentlyPlayed.map(item => (
@@ -632,9 +783,7 @@ export default function App() {
     setError('');
     setResults([]);
     try {
-      // Use your actual backend URL here
-      const apiBaseUrl = 'https://web-music-player-mu.vercel.app';
-      const res = await axios.get(`${apiBaseUrl}/api/search`, { params: { q: search }, timeout: 10000 });
+      const res = await axios.get(`${API_BASE_URL}/api/search`, { params: { q: search }, timeout: 10000 });
       setResults(res.data.items || []);
     } catch (err) {
       setError(`Failed to fetch results: ${err.message}`);
@@ -654,6 +803,47 @@ export default function App() {
     setPlaylists(newList);
     setNewPlaylistName('');
     setToast('Playlist created!');
+  };
+
+  const handleCreateYouTubePlaylist = async () => {
+    if (!youtubePlaylistUrl.trim()) return;
+    
+    setYoutubePlaylistLoading(true);
+    setError('');
+    
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/playlist`, { 
+        params: { playlistUrl: youtubePlaylistUrl.trim() }, 
+        timeout: 15000 
+      });
+      
+      const { playlistInfo, videos } = res.data;
+      
+      // Check if playlist with this name already exists
+      if (playlists.some(p => p.name === playlistInfo.title)) {
+        setToast('A playlist with this name already exists!');
+        return;
+      }
+      
+      // Create new playlist with YouTube videos
+      const newPlaylist = {
+        name: playlistInfo.title,
+        songs: videos,
+        source: 'youtube',
+        originalUrl: youtubePlaylistUrl.trim()
+      };
+      
+      setPlaylists(prev => [...prev, newPlaylist]);
+      setYoutubePlaylistUrl('');
+      setShowYouTubePlaylistModal(false);
+      setToast(`Playlist "${playlistInfo.title}" created with ${videos.length} songs!`);
+      
+    } catch (err) {
+      console.error('YouTube playlist fetch error:', err);
+      setError(`Failed to create playlist: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setYoutubePlaylistLoading(false);
+    }
   };
 
   const handleAddToPlaylist = (playlistName, song) => {
@@ -678,7 +868,7 @@ export default function App() {
   // UI for Playlists Tab
   const renderPlaylistsTab = () => (
     <div>
-      <h1>Playlists</h1>
+              <h1 style={{fontSize:'1.8rem'}}>Playlists</h1>
       <div style={{marginBottom: '1.5rem'}}>
         <input
           type="text"
@@ -690,11 +880,37 @@ export default function App() {
         <button style={{borderRadius: 6, padding: '0.5rem 1rem', background: '#5eead4', color: '#222', fontWeight: 600, border: 'none', cursor: 'pointer'}} onClick={handleCreatePlaylist}>
           + New Playlist
         </button>
+        <button 
+          style={{
+            borderRadius: 6, 
+            padding: '0.5rem 1rem', 
+            background: '#ff6b6b', 
+            color: '#fff', 
+            fontWeight: 600, 
+            border: 'none', 
+            cursor: 'pointer',
+            marginLeft: '0.5rem'
+          }} 
+          onClick={() => setShowYouTubePlaylistModal(true)}
+        >
+          + Add Playlist from YouTube 
+        </button>
       </div>
       <div style={{display: 'flex', flexWrap: 'wrap', gap: '1.5rem'}}>
         {playlists.length === 0 && <div style={{color:'#bfc9d9'}}>No playlists yet.</div>}
         {playlists.map(p => (
           <div key={p.name} style={{background:'#23243a', borderRadius:12, padding:'1.2rem 2rem', minWidth:220, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.15)', position:'relative', overflow:'hidden'}}>
+            {/* Playlist name at top left */}
+            <div style={{fontWeight:600, fontSize:'0.95rem', color:'#fff', marginBottom:'0.5rem'}}>
+              {p.name}
+              {p.source === 'youtube' && (
+                <span style={{fontSize:'0.7rem', color:'#ff6b6b', marginLeft:'0.5rem'}}>YouTube</span>
+              )}
+              {p.source === 'auto-generated' && (
+                <span style={{fontSize:'0.7rem', color:'#667eea', marginLeft:'0.5rem'}}>Auto</span>
+              )}
+            </div>
+            
             {/* Action buttons */}
             <div style={{position:'absolute', top:12, right:16, display:'flex', gap:'0.5rem', zIndex:2}}>
               <button title="Edit Playlist" style={{background:'#23243a', border:'none', color:'#bfc9d9', cursor:'pointer', borderRadius:'50%', width:32, height:32, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 1px 4px rgba(0,0,0,0.10)', transition:'background 0.2s'}} onClick={e => {e.stopPropagation(); setEditingPlaylist(p.name); setEditPlaylistName(p.name);}}>
@@ -721,10 +937,7 @@ export default function App() {
               </form>
             ) : (
               <>
-                <div style={{fontWeight:700, fontSize:'1.1rem', marginBottom:'0.5rem', color:'#fff', display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'2.5rem'}}>
-                  <span className="material-symbols-outlined" style={{verticalAlign:'middle', marginRight:6}}>queue_music</span> {p.name}
-                </div>
-                <div style={{color:'#bfc9d9', fontSize:'0.95rem'}}>{p.songs.length} song{p.songs.length !== 1 ? 's' : ''}</div>
+                <div style={{color:'#bfc9d9', fontSize:'0.85rem', marginTop:'0.5rem'}}>{p.songs.length} song{p.songs.length !== 1 ? 's' : ''}</div>
                 <div onClick={() => setSelectedPlaylist(p.name)} style={{position:'absolute', top:0, left:0, right:0, bottom:0, zIndex:1}} />
               </>
             )}
@@ -733,13 +946,38 @@ export default function App() {
       </div>
       {selectedPlaylist && (
         <div style={{marginTop:'2.5rem'}}>
-          <h2 style={{color:'#fff', fontWeight:700}}>{selectedPlaylist}</h2>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+            <h2 style={{color:'#fff', fontWeight:600, fontSize:'1.3rem'}}>{selectedPlaylist}</h2>
+            <button 
+              style={{
+                borderRadius: 6,
+                padding: '0.5rem 1rem',
+                background: '#5eead4',
+                color: '#23243a',
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+              onClick={() => {
+                const playlist = playlists.find(p => p.name === selectedPlaylist);
+                if (playlist && playlist.songs.length > 0) {
+                  handlePlayFromPlaylist(playlist.songs[0], selectedPlaylist);
+                }
+              }}
+            >
+              <span className="material-symbols-outlined">play_circle</span>
+              Play All
+            </button>
+          </div>
           <div className="search-results">
             {playlists.find(p => p.name === selectedPlaylist)?.songs.map(item => (
               <div
                 key={item.id.videoId}
                 className="search-result"
-                onClick={() => handleSongClick(item)}
+                onClick={() => handlePlayFromPlaylist(item, selectedPlaylist)}
                 style={{position:'relative'}}
               >
                 <button
@@ -767,7 +1005,7 @@ export default function App() {
   // UI for Favorites Tab
   const renderFavoritesTab = () => (
     <div>
-      <h1>Favorites</h1>
+              <h1 style={{fontSize:'1.8rem'}}>Favorites</h1>
       <div className="search-results">
         {favorites.length === 0 && <div style={{color:'#bfc9d9'}}>No favorite songs yet.</div>}
         {favorites.map(item => (
@@ -892,7 +1130,7 @@ export default function App() {
   const renderQueueTab = () => (
     <div>
       <div className="queue-header">
-        <h1>Queue</h1>
+        <h1 style={{fontSize:'1.8rem'}}>Queue</h1>
         {songQueue.length > 0 && (
           <button 
             className="play-queue-btn"
@@ -1045,7 +1283,7 @@ export default function App() {
           renderQueueTab()
         ) : (
           <>
-            <h1>Welcome to Your Music Player</h1>
+            <h1 style={{fontSize:'1.8rem'}}>Welcome to Your Music Player</h1>
             <form onSubmit={handleSearch} className="search-bar">
               <input
                 type="text"
@@ -1071,6 +1309,56 @@ export default function App() {
                     {s}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* Auto-Playlist Songs Section */}
+            {results.length === 0 && autoPlaylistSongs.length > 0 && (
+              <div style={{marginTop: '2rem'}}>
+                <h2 style={{color: '#fff', fontSize: '1.4rem', marginBottom: '1rem'}}>
+                  🎵 Trending Songs
+                </h2>
+                <div className="search-results">
+                  {autoPlaylistSongs.map((song, index) => (
+                    <div
+                      key={`${song.id.videoId}-${index}`}
+                      className="search-result"
+                      onClick={() => handleSongClick(song)}
+                      style={{position: 'relative'}}
+                    >
+                      <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        background: 'rgba(0,0,0,0.7)',
+                        color: '#fff',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.7rem',
+                        fontWeight: '600'
+                      }}>
+                        {song.category}
+                      </div>
+                      <img
+                        src={song.snippet.thumbnails.medium?.url || song.snippet.thumbnails.default.url}
+                        alt={song.snippet.title}
+                      />
+                      <div className="title">{song.snippet.title}</div>
+                      <div className="artist">{song.snippet.channelTitle}</div>
+                      <div className="duration">3:45</div>
+                      <button 
+                        className="add-to-queue-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToQueue(song);
+                        }}
+                        title="Add to queue"
+                      >
+                        <span className="material-symbols-outlined">queue_music</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {loading && <div className="loading">Searching for your favorite music...</div>}
@@ -1122,6 +1410,90 @@ export default function App() {
               ))}
             </div>
             <button style={{marginTop:'1.5rem', width:'100%', borderRadius:6, padding:'0.5rem', background:'#bfc9d9', color:'#23243a', fontWeight:600, border:'none', cursor:'pointer'}} onClick={() => setShowAddModal(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* YouTube Playlist Modal */}
+      {showYouTubePlaylistModal && (
+        <div style={{position: 'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={() => setShowYouTubePlaylistModal(false)}>
+          <div style={{background:'#23243a', padding:'2rem', borderRadius:12, minWidth:400, maxWidth:500, boxShadow:'0 8px 32px rgba(0,0,0,0.3)'}} onClick={e => e.stopPropagation()}>
+            <h3 style={{marginBottom:'1rem', color:'#fff'}}>
+              <span className="material-symbols-outlined" style={{verticalAlign:'middle', marginRight:'0.5rem', color:'#ff6b6b'}}>youtube</span>
+              Create Playlist from YouTube
+            </h3>
+            <p style={{color:'#bfc9d9', marginBottom:'1.5rem', fontSize:'0.9rem'}}>
+              Paste a YouTube playlist URL to create a playlist with all the songs from that playlist.
+            </p>
+            <div style={{marginBottom:'1.5rem'}}>
+              <input
+                type="text"
+                placeholder="https://www.youtube.com/playlist?list=..."
+                value={youtubePlaylistUrl}
+                onChange={e => setYoutubePlaylistUrl(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.8rem',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: '#1a1b2e',
+                  color: '#fff',
+                  fontSize: '0.9rem'
+                }}
+                disabled={youtubePlaylistLoading}
+              />
+            </div>
+            {error && (
+              <div style={{color:'#ff6b6b', marginBottom:'1rem', fontSize:'0.9rem'}}>
+                {error}
+              </div>
+            )}
+            <div style={{display:'flex', gap:'0.5rem', justifyContent:'flex-end'}}>
+              <button 
+                style={{
+                  borderRadius: 6,
+                  padding: '0.5rem 1rem',
+                  background: '#bfc9d9',
+                  color: '#23243a',
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  setShowYouTubePlaylistModal(false);
+                  setYoutubePlaylistUrl('');
+                  setError('');
+                }}
+                disabled={youtubePlaylistLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                style={{
+                  borderRadius: 6,
+                  padding: '0.5rem 1rem',
+                  background: youtubePlaylistLoading ? '#666' : '#ff6b6b',
+                  color: '#fff',
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: youtubePlaylistLoading ? 'not-allowed' : 'pointer'
+                }}
+                onClick={handleCreateYouTubePlaylist}
+                disabled={youtubePlaylistLoading || !youtubePlaylistUrl.trim()}
+              >
+                {youtubePlaylistLoading ? (
+                  <>
+                    <span className="material-symbols-outlined" style={{verticalAlign:'middle', marginRight:'0.3rem', animation:'spin 1s linear infinite'}}>sync</span>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined" style={{verticalAlign:'middle', marginRight:'0.3rem'}}>playlist_add</span>
+                    Create Playlist
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1227,7 +1599,14 @@ export default function App() {
                             />
                   <div className="song-details">
                     <div className="song-title">{nowPlaying.snippet.title}</div>
-                    <div className="song-artist">{nowPlaying.snippet.channelTitle}</div>
+                    <div className="song-artist">
+                      {nowPlaying.snippet.channelTitle}
+                      {currentPlaylist && (
+                        <span style={{fontSize:'0.8rem', color:'#ff6b6b', marginLeft:'0.5rem'}}>
+                          • From {currentPlaylist}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
