@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import './App.css';
 
 const navLinks = [
   { id: 'home', label: 'Home', icon: 'home' },
@@ -168,9 +169,52 @@ export default function App() {
     }, 300); // Match the animation duration
   };
 
+  // Initialize MediaSession API for mobile background playback
+  const initializeMediaSession = useCallback(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: nowPlaying?.snippet?.title || 'Music Player',
+        artist: nowPlaying?.snippet?.channelTitle || 'Unknown Artist',
+        album: 'Music Player',
+        artwork: nowPlaying?.snippet?.thumbnails?.high?.url ? [
+          { src: nowPlaying.snippet.thumbnails.high.url, sizes: '512x512', type: 'image/jpeg' }
+        ] : []
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        if (playerRef.current) {
+          playerRef.current.playVideo();
+        }
+      });
+
+      navigator.mediaSession.setActionHandler('pause', () => {
+        if (playerRef.current) {
+          playerRef.current.pauseVideo();
+        }
+      });
+
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        handlePrevious();
+      });
+
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        handleNext();
+      });
+
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined && playerRef.current) {
+          playerRef.current.seekTo(details.seekTime);
+        }
+      });
+    }
+  }, [nowPlaying]);
+
   // YouTube Player API Integration
   const initializePlayer = useCallback(() => {
     if (playerRef.current) return; // Already initialized
+
+    // Initialize MediaSession
+    initializeMediaSession();
 
     playerRef.current = new window.YT.Player('youtube-player', {
       height: '0',
@@ -195,7 +239,7 @@ export default function App() {
         onError: onPlayerError,
       },
     });
-  }, []);
+  }, [initializeMediaSession]);
 
   const onPlayerReady = (event) => {
     event.target.setVolume(volume); // Set initial volume when player is ready
@@ -207,13 +251,25 @@ export default function App() {
       case window.YT.PlayerState.PLAYING:
         setIsPlaying(true);
         startTimeUpdate();
+        // Update MediaSession state
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
         break;
       case window.YT.PlayerState.PAUSED:
         setIsPlaying(false);
+        // Update MediaSession state
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
         break;
       case window.YT.PlayerState.ENDED:
         setIsPlaying(false);
         setCurrentTime(0);
+        // Update MediaSession state
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'none';
+        }
         
         // Handle repeat and autoplay
         if (repeatMode === 'one') {
@@ -325,6 +381,55 @@ export default function App() {
     }
   }, [initializePlayer]);
 
+  // Register Service Worker for background audio
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered successfully:', registration);
+        })
+        .catch((error) => {
+          console.log('Service Worker registration failed:', error);
+        });
+
+      // Listen for messages from service worker
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data.action === 'play') {
+          if (playerRef.current) {
+            playerRef.current.playVideo();
+          }
+        } else if (event.data.action === 'pause') {
+          if (playerRef.current) {
+            playerRef.current.pauseVideo();
+          }
+        }
+      });
+    }
+  }, []);
+
+  // Handle page visibility changes for background audio
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden (background) - ensure audio continues
+        if (isPlaying && playerRef.current) {
+          // Keep playing in background
+          console.log('App went to background, keeping audio playing');
+        }
+      } else {
+        // Page is visible again - sync player state
+        if (playerRef.current) {
+          console.log('App came to foreground');
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying]);
+
   useEffect(() => {
     savePlaylistsToStorage(playlists);
   }, [playlists]);
@@ -343,6 +448,20 @@ export default function App() {
       playerRef.current.setVolume(volume);
     }
   }, [volume]);
+
+  // Update MediaSession metadata when nowPlaying changes
+  useEffect(() => {
+    if ('mediaSession' in navigator && nowPlaying) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: nowPlaying.snippet?.title || 'Unknown Track',
+        artist: nowPlaying.snippet?.channelTitle || 'Unknown Artist',
+        album: 'Music Player',
+        artwork: nowPlaying.snippet?.thumbnails?.high?.url ? [
+          { src: nowPlaying.snippet.thumbnails.high.url, sizes: '512x512', type: 'image/jpeg' }
+        ] : []
+      });
+    }
+  }, [nowPlaying]);
 
   // Recently Played Songs Management
   const addToRecentlyPlayed = (song) => {
