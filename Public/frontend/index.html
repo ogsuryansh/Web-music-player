@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Music Player</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+      // Suppress YouTube IFrame API cross-origin errors
+      const originalError = console.error;
+      console.error = function(...args) {
+        if (args[0] && typeof args[0] === 'string' && 
+            (args[0].includes('postMessage') || args[0].includes('CORS') || args[0].includes('Access-Control'))) {
+          return;
+        }
+        originalError.apply(console, args);
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
