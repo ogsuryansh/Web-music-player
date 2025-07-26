@@ -55,6 +55,8 @@ module.exports = async (req, res) => {
 
   try {
     console.log('[DEBUG] Making YouTube API request with query:', q);
+    console.log('[DEBUG] API Key length:', YOUTUBE_API_KEY?.length);
+    
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet',
@@ -63,12 +65,31 @@ module.exports = async (req, res) => {
         maxResults: 15,
         key: YOUTUBE_API_KEY,
       },
+      timeout: 10000, // 10 second timeout
     });
+    
     console.log('[DEBUG] YouTube API response status:', response.status);
+    console.log('[DEBUG] Response data keys:', Object.keys(response.data || {}));
+    
+    if (!response.data || !response.data.items) {
+      console.log('[DEBUG] Invalid response structure:', response.data);
+      return res.status(500).json({ error: 'Invalid YouTube API response' });
+    }
+    
     res.status(200).json(response.data);
   } catch (error) {
     console.log('[DEBUG] YouTube API error:', error.message);
-    console.log('[DEBUG] Error response:', error.response?.data);
-    res.status(500).json({ error: 'YouTube search failed', details: error.message, yt: error.response?.data });
+    console.log('[DEBUG] Error code:', error.code);
+    console.log('[DEBUG] Error response status:', error.response?.status);
+    console.log('[DEBUG] Error response data:', error.response?.data);
+    
+    // Return more specific error information
+    res.status(500).json({ 
+      error: 'YouTube search failed', 
+      details: error.message,
+      code: error.code,
+      status: error.response?.status,
+      yt: error.response?.data 
+    });
   }
 }; 
