@@ -12,11 +12,20 @@ const stream = require('./api/stream');
 
 const app = express();
 
-// CORS setup for Netlify and Vercel
+// CORS setup for Netlify and Vercel - more robust for serverless
 const allowedOrigins = [
   'https://web-music-player-01.netlify.app',
   'http://localhost:3000',
 ];
+
+// Handle preflight requests
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(cors({
   origin: function (origin, callback) {
     // allow requests with no origin (like mobile apps, curl, etc.)
@@ -25,6 +34,8 @@ app.use(cors({
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Mount API routes

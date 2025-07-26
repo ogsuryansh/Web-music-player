@@ -1,6 +1,18 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
+  // Add CORS headers as backup
+  res.setHeader('Access-Control-Allow-Origin', 'https://web-music-player-01.netlify.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   const { q } = req.query;
   console.log('[DEBUG] /api/search called with query:', q);
   if (!q) {
