@@ -1,27 +1,30 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-  // Add CORS headers
-  const allowedOrigins = [
-    'https://web-music-player-01.netlify.app',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:4173'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  try {
+    console.log('[DEBUG] Playlist API called with method:', req.method);
+    
+    // Add CORS headers
+    const allowedOrigins = [
+      'https://web-music-player-01.netlify.app',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:4173'
+    ];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
   const { playlistUrl } = req.query;
   
@@ -126,10 +129,19 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
+    console.log('[DEBUG] Playlist API error:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch playlist', 
       details: error.message, 
       yt: error.response?.data 
+    });
+  } catch (outerError) {
+    console.log('[DEBUG] Playlist API outer catch - unexpected error:', outerError.message);
+    console.log('[DEBUG] Outer error stack:', outerError.stack);
+    res.status(500).json({ 
+      error: 'Unexpected server error', 
+      details: outerError.message,
+      stack: outerError.stack
     });
   }
 }; 

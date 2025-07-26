@@ -1,27 +1,31 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-  // Add CORS headers as backup
-  const allowedOrigins = [
-    'https://web-music-player-01.netlify.app',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:4173'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  try {
+    console.log('[DEBUG] Search API called with method:', req.method);
+    console.log('[DEBUG] Request headers:', req.headers);
+    
+    // Add CORS headers as backup
+    const allowedOrigins = [
+      'https://web-music-player-01.netlify.app',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:4173'
+    ];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
   const { q } = req.query;
   if (!q) {
@@ -90,6 +94,14 @@ module.exports = async (req, res) => {
       code: error.code,
       status: error.response?.status,
       yt: error.response?.data 
+    });
+  } catch (outerError) {
+    console.log('[DEBUG] Outer catch block - unexpected error:', outerError.message);
+    console.log('[DEBUG] Outer error stack:', outerError.stack);
+    res.status(500).json({ 
+      error: 'Unexpected server error', 
+      details: outerError.message,
+      stack: outerError.stack
     });
   }
 }; 

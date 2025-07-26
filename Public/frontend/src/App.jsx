@@ -697,25 +697,66 @@ export default function App() {
       try {
         // Get 2-3 songs from each category
         for (const category of autoPlaylistCategories) {
-          const keyword = category.keywords[Math.floor(Math.random() * category.keywords.length)];
-          const res = await axios.get(`${API_BASE_URL}/api/search`, { 
-            params: { q: keyword }, 
-            timeout: 10000 
-          });
-          
-          if (res.data.items && res.data.items.length > 0) {
-            const songs = res.data.items.slice(0, 3).map(song => ({
-              ...song,
-              category: category.name
-            }));
-            allSongs.push(...songs);
+          try {
+            const keyword = category.keywords[Math.floor(Math.random() * category.keywords.length)];
+            console.log('[DEBUG] Loading songs for category:', category.name, 'with keyword:', keyword);
+            
+            const res = await axios.get(`${API_BASE_URL}/api/search`, { 
+              params: { q: keyword }, 
+              timeout: 15000 
+            });
+            
+            console.log('[DEBUG] API response for', category.name, ':', res.status, res.data?.items?.length || 0);
+            
+            if (res.data.items && res.data.items.length > 0) {
+              const songs = res.data.items.slice(0, 3).map(song => ({
+                ...song,
+                category: category.name
+              }));
+              allSongs.push(...songs);
+            }
+          } catch (categoryError) {
+            console.error(`[DEBUG] Error loading category ${category.name}:`, categoryError);
+            // Continue with other categories even if one fails
           }
+        }
+        
+        if (allSongs.length === 0) {
+          console.log('[DEBUG] No songs loaded, using fallback data');
+          // Add some fallback songs if API fails completely
+          allSongs.push({
+            id: { videoId: 'dQw4w9WgXcQ' },
+            snippet: {
+              title: 'Fallback Song - Test',
+              channelTitle: 'Test Channel',
+              thumbnails: {
+                default: { url: 'https://via.placeholder.com/120x90' },
+                medium: { url: 'https://via.placeholder.com/320x180' },
+                high: { url: 'https://via.placeholder.com/480x360' }
+              }
+            },
+            category: 'Test'
+          });
         }
         
         setAutoPlaylistSongs(allSongs);
       } catch (err) {
         console.error('Auto-playlist loading error:', err);
         setError('Failed to load songs');
+        // Set fallback songs even on complete failure
+        setAutoPlaylistSongs([{
+          id: { videoId: 'dQw4w9WgXcQ' },
+          snippet: {
+            title: 'Error Fallback Song',
+            channelTitle: 'Test Channel',
+            thumbnails: {
+              default: { url: 'https://via.placeholder.com/120x90' },
+              medium: { url: 'https://via.placeholder.com/320x180' },
+              high: { url: 'https://via.placeholder.com/480x360' }
+            }
+          },
+          category: 'Error'
+        }]);
       } finally {
         setLoading(false);
       }
