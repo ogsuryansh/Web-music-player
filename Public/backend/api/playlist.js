@@ -30,7 +30,10 @@ module.exports = async (req, res) => {
   }
 
   const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+  console.log('[DEBUG] Playlist API - YOUTUBE_API_KEY exists:', !!YOUTUBE_API_KEY);
+  
   if (!YOUTUBE_API_KEY) {
+    console.log('[DEBUG] Playlist API - No API key found, returning mock data');
     // Return mock data for testing
     return res.status(200).json({
       playlistInfo: {

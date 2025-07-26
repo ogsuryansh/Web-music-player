@@ -32,7 +32,14 @@ app.get('/api/playlist', playlist);
 
 // Health check
 app.get('/', (req, res) => {
-  res.send('Backend is running!');
+  res.json({ 
+    message: 'Backend is running!',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasYoutubeKey: !!process.env.YOUTUBE_API_KEY,
+      nodeEnv: process.env.NODE_ENV
+    }
+  });
 });
 
 const PORT = process.env.PORT || 5000;

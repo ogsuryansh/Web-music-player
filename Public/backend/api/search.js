@@ -29,7 +29,11 @@ module.exports = async (req, res) => {
   }
 
   const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+  console.log('[DEBUG] YOUTUBE_API_KEY exists:', !!YOUTUBE_API_KEY);
+  console.log('[DEBUG] Environment variables:', Object.keys(process.env).filter(key => key.includes('YOUTUBE')));
+  
   if (!YOUTUBE_API_KEY) {
+    console.log('[DEBUG] No API key found, returning mock data');
     // Return mock data for testing
     return res.status(200).json({
       items: [
@@ -50,6 +54,7 @@ module.exports = async (req, res) => {
   }
 
   try {
+    console.log('[DEBUG] Making YouTube API request with query:', q);
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet',
@@ -59,8 +64,11 @@ module.exports = async (req, res) => {
         key: YOUTUBE_API_KEY,
       },
     });
+    console.log('[DEBUG] YouTube API response status:', response.status);
     res.status(200).json(response.data);
   } catch (error) {
+    console.log('[DEBUG] YouTube API error:', error.message);
+    console.log('[DEBUG] Error response:', error.response?.data);
     res.status(500).json({ error: 'YouTube search failed', details: error.message, yt: error.response?.data });
   }
 }; 
