@@ -481,11 +481,11 @@ export default function App() {
 
   // Remove WaveformVisualizer component
 
-  // Handle hash-based routing for /playlist, /favorite, and /history
+  // Handle hash-based routing for /playlists, /favorite, /history, and /queue
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.hash === '#/playlist') {
-        setActiveTab('playlist');
+      if (window.location.hash === '#/playlists') {
+        setActiveTab('playlists');
         setSelectedPlaylist(null);
       } else if (window.location.hash === '#/favorite') {
         setActiveTab('favorite');
@@ -513,7 +513,9 @@ export default function App() {
     setError('');
     setResults([]);
     try {
-      const res = await axios.get('/api/search', { params: { q: search }, timeout: 10000 });
+      // Use your actual backend URL here
+      const apiBaseUrl = 'https://web-music-player-mu.vercel.app';
+      const res = await axios.get(`${apiBaseUrl}/api/search`, { params: { q: search }, timeout: 10000 });
       setResults(res.data.items || []);
     } catch (err) {
       setError(`Failed to fetch results: ${err.message}`);
