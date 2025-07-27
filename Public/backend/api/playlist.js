@@ -178,6 +178,7 @@ module.exports = async (req, res) => {
       details: error.message, 
       yt: error.response?.data 
     });
+  }
   } catch (outerError) {
     console.log('[DEBUG] Playlist API outer catch - unexpected error:', outerError.message);
     console.log('[DEBUG] Outer error stack:', outerError.stack);
