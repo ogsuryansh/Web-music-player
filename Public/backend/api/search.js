@@ -129,13 +129,5 @@ module.exports = async (req, res) => {
       status: error.response?.status,
       yt: error.response?.data 
     });
-  } catch (outerError) {
-    console.log('[DEBUG] Outer catch block - unexpected error:', outerError.message);
-    console.log('[DEBUG] Outer error stack:', outerError.stack);
-    res.status(500).json({ 
-      error: 'Unexpected server error', 
-      details: outerError.message,
-      stack: outerError.stack
-    });
   }
 }; 
