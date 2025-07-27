@@ -1324,7 +1324,7 @@ export default function App() {
           renderQueueTab()
         ) : (
           <>
-            <h1 style={{fontSize:'1.8rem'}}>Welcome to Your Music Player</h1>
+            <h1 style={{fontSize:'1.8rem'}}>Welcome to Glass Music</h1>
             <form onSubmit={handleSearch} className="search-bar">
               <input
                 type="text"

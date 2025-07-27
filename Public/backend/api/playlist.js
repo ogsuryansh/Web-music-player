@@ -6,6 +6,7 @@ module.exports = async (req, res) => {
     
     // Add CORS headers
     const allowedOrigins = [
+      'https://glassmusic.fun',
       'https://web-music-player-01.netlify.app',
       'http://localhost:3000',
       'http://localhost:5173',
@@ -180,8 +181,6 @@ module.exports = async (req, res) => {
     });
   }
   } catch (outerError) {
-    console.log('[DEBUG] Playlist API outer catch - unexpected error:', outerError.message);
-    console.log('[DEBUG] Outer error stack:', outerError.stack);
     res.status(500).json({ 
       error: 'Unexpected server error', 
       details: outerError.message,

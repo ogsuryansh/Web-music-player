@@ -16,6 +16,7 @@ const app = express();
 // Simple CORS setup for Vercel serverless
 app.use(cors({
   origin: [
+    'https://glassmusic.fun',
     'https://web-music-player-01.netlify.app', 
     'http://localhost:3000',
     'http://localhost:5173',

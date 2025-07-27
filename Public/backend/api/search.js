@@ -7,6 +7,7 @@ module.exports = async (req, res) => {
     
     // Add CORS headers as backup
     const allowedOrigins = [
+      'https://glassmusic.fun',
       'https://web-music-player-01.netlify.app',
       'http://localhost:3000',
       'http://localhost:5173',
